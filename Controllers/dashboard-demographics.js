@@ -69,12 +69,19 @@ const getMaritalStatusByVillage = async (req, res) => {
       return acc;
     }, {});
 
-    res
-      .status(200)
-      .json({ village: village, maritalStatusCounts: formattedCounts });
+    res.status(200).json({
+      status: "success",
+      data: {
+        village: village,
+        maritalStatusCounts: formattedCounts,
+      },
+    });
   } catch (error) {
     console.error("Error fetching marital status by village:", error);
-    res.status(500).json({ error: "Internal server error." });
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error.",
+    });
   }
 };
 
@@ -185,15 +192,19 @@ const getDietShareByVillageAndOptionalGender = async (req, res) => {
       {}
     );
 
-    res
-      .status(200)
-      .json({ village: village, dietShareAndCount: formattedResult });
+    res.status(200).json({
+      status: "success",
+      data: { village: village, dietShareAndCount: formattedResult },
+    });
   } catch (error) {
     console.error(
       "Error fetching diet share and count by village and gender:",
       error
     );
-    res.status(500).json({ error: "Internal server error." });
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error.",
+    });
   }
 };
 
@@ -295,12 +306,16 @@ const getBMIDistributionByVillageAndOptionalGender = async (req, res) => {
       return acc;
     }, {});
 
-    res
-      .status(200)
-      .json({ village: village, bmiDistribution: formattedResult });
+    res.status(200).json({
+      status: "success",
+      data: { village: village, bmiDistribution: formattedResult },
+    });
   } catch (error) {
     console.error("Error fetching BMI distribution:", error);
-    res.status(500).json({ error: "Internal server error." });
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error.",
+    });
   }
 };
 
@@ -432,10 +447,19 @@ const getChronicDiseasePrevalence = async (req, res) => {
       return acc;
     }, {});
 
-    res.status(200).json({ chronicDiseasePrevalence: formattedResult });
+    res.status(200).json({
+      status: "success",
+      data: {
+        village: village,
+        chronicDiseasePrevalence: formattedResult,
+      },
+    });
   } catch (error) {
     console.error("Error fetching chronic disease prevalence:", error);
-    res.status(500).json({ error: "Internal server error." });
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error.",
+    });
   }
 };
 
@@ -543,14 +567,26 @@ const getIncomeRangeByAgeAndOptionalGender = async (req, res) => {
       return acc;
     }, {});
 
-    res.status(200).json({ incomeRangeValues: formattedResult });
+    res.status(200).json({
+      status: "success",
+      data: {
+        village: village,
+        incomeRangeValues: formattedResult,
+      },
+    });
   } catch (error) {
     console.error("Error fetching income range values:", error);
-    res.status(500).json({ error: "Internal server error." });
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error.",
+    });
   }
 };
 
-const getMotorDisabilityPrevalenceByVillageAndOptionalGender = async (req, res) => {
+const getMotorDisabilityPrevalenceByVillageAndOptionalGender = async (
+  req,
+  res
+) => {
   try {
     const { village, gender } = req.query;
 
@@ -564,7 +600,9 @@ const getMotorDisabilityPrevalenceByVillageAndOptionalGender = async (req, res) 
 
     const memberMatchStage = {};
     if (gender) {
-      memberMatchStage["members.gender"] = { $regex: new RegExp(`\\b${gender}\\b`, "i") };
+      memberMatchStage["members.gender"] = {
+        $regex: new RegExp(`\\b${gender}\\b`, "i"),
+      };
     }
 
     const motorDisabilityData = await User.aggregate([
@@ -637,9 +675,11 @@ const getMotorDisabilityPrevalenceByVillageAndOptionalGender = async (req, res) 
               input: "$disabilities",
               as: "d",
               in: {
-                name: "$$d.name", 
+                name: "$$d.name",
                 count: "$$d.count",
-                share: { $round: [{ $divide: ["$$d.count", "$totalMembers"] }, 2] },
+                share: {
+                  $round: [{ $divide: ["$$d.count", "$totalMembers"] }, 2],
+                },
               },
             },
           },
@@ -665,10 +705,19 @@ const getMotorDisabilityPrevalenceByVillageAndOptionalGender = async (req, res) 
       return acc;
     }, {});
 
-    res.status(200).json({ motorDisabilityPrevalence: formattedResult });
+    res.status(200).json({
+      status: "success",
+      data: {
+        village: village,
+        motorDisabilityPrevalence: formattedResult,
+      },
+    });
   } catch (error) {
     console.error("Error fetching motor disability prevalence:", error);
-    res.status(500).json({ error: "Internal server error." });
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error.",
+    });
   }
 };
 
@@ -678,5 +727,5 @@ module.exports = {
   getBMIDistributionByVillageAndOptionalGender,
   getChronicDiseasePrevalence,
   getIncomeRangeByAgeAndOptionalGender,
-  getMotorDisabilityPrevalenceByVillageAndOptionalGender
+  getMotorDisabilityPrevalenceByVillageAndOptionalGender,
 };
