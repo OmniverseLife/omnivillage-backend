@@ -1,0 +1,682 @@
+const User = require("../Models/user");
+
+const getMaritalStatusByVillage = async (req, res) => {
+  try {
+    const { village } = req.query;
+
+    if (!village) {
+      return res.status(400).json({ error: "Village parameter is required." });
+    }
+
+    const maritalStatusCounts = await User.aggregate([
+      {
+        $match: {
+          village_name: { $regex: new RegExp(village, "i") },
+        },
+      },
+      {
+        $unwind: "$members",
+      },
+      {
+        $match: {
+          "members.demographic_id": { $ne: null },
+        },
+      },
+      {
+        $lookup: {
+          from: "demographics",
+          localField: "members.demographic_id",
+          foreignField: "_id",
+          as: "memberDemographic",
+        },
+      },
+      {
+        $unwind: "$memberDemographic",
+      },
+      {
+        $lookup: {
+          from: "demographic_dropdowns",
+          localField: "memberDemographic.marital_status",
+          foreignField: "_id",
+          as: "maritalStatusInfo",
+        },
+      },
+      {
+        $unwind: "$maritalStatusInfo",
+      },
+      {
+        $match: {
+          "maritalStatusInfo.type": "marital_status",
+        },
+      },
+      {
+        $group: {
+          _id: "$maritalStatusInfo.name.en",
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          maritalStatus: "$_id",
+          count: 1,
+        },
+      },
+    ]);
+
+    const formattedCounts = maritalStatusCounts.reduce((acc, item) => {
+      acc[item.maritalStatus] = item.count;
+      return acc;
+    }, {});
+
+    res
+      .status(200)
+      .json({ village: village, maritalStatusCounts: formattedCounts });
+  } catch (error) {
+    console.error("Error fetching marital status by village:", error);
+    res.status(500).json({ error: "Internal server error." });
+  }
+};
+
+const getDietShareByVillageAndOptionalGender = async (req, res) => {
+  try {
+    const { village, gender } = req.query;
+
+    if (!village) {
+      return res.status(400).json({ error: "Village parameter is required." });
+    }
+
+    const initialMatchStage = {
+      village_name: { $regex: new RegExp(village, "i") },
+    };
+
+    const memberMatchStage = {};
+    if (gender) {
+      memberMatchStage["members.gender"] = {
+        $regex: new RegExp(`\\b${gender}\\b`, "i"),
+      };
+    }
+
+    const groupStageId = {};
+    groupStageId.gender = "$members.gender";
+    groupStageId.dietNames = "$dietInfo.name";
+
+    const dietShareAndCountByVillageGender = await User.aggregate([
+      {
+        $match: initialMatchStage,
+      },
+      {
+        $unwind: "$members",
+      },
+      {
+        $match: memberMatchStage, // Filter members by gender after unwinding
+      },
+      {
+        $lookup: {
+          from: "demographics",
+          localField: "members.demographic_id",
+          foreignField: "_id",
+          as: "memberDemographic",
+        },
+      },
+      {
+        $unwind: "$memberDemographic",
+      },
+      {
+        $lookup: {
+          from: "demographic_dropdowns",
+          localField: "memberDemographic.diet",
+          foreignField: "_id",
+          as: "dietInfo",
+        },
+      },
+      {
+        $unwind: {
+          path: "$dietInfo",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $group: {
+          _id: groupStageId,
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $group: {
+          _id: "$_id.gender",
+          total: { $sum: "$count" },
+          diets: {
+            $push: {
+              names: "$_id.dietNames",
+              count: "$count",
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          group: "$_id",
+          diets: {
+            $map: {
+              input: "$diets",
+              as: "d",
+              in: {
+                names: "$$d.names",
+                count: "$$d.count",
+                share: { $round: [{ $divide: ["$$d.count", "$total"] }, 2] },
+              },
+            },
+          },
+        },
+      },
+    ]);
+
+    const formattedResult = dietShareAndCountByVillageGender.reduce(
+      (acc, item) => {
+        acc[item.group] = item.diets.map((dietInfo) => ({
+          names: dietInfo.names,
+          count: dietInfo.count,
+          share: dietInfo.share,
+        }));
+        return acc;
+      },
+      {}
+    );
+
+    res
+      .status(200)
+      .json({ village: village, dietShareAndCount: formattedResult });
+  } catch (error) {
+    console.error(
+      "Error fetching diet share and count by village and gender:",
+      error
+    );
+    res.status(500).json({ error: "Internal server error." });
+  }
+};
+
+const getBMIDistributionByVillageAndOptionalGender = async (req, res) => {
+  try {
+    const { village, gender } = req.query;
+
+    if (!village) {
+      return res.status(400).json({ error: "Village parameter is required." });
+    }
+
+    const initialMatchStage = {
+      village_name: { $regex: new RegExp(village, "i") },
+    };
+
+    const memberMatchStage = {};
+    if (gender) {
+      memberMatchStage["members.gender"] = {
+        $regex: new RegExp(`\\b${gender}\\b`, "i"),
+      };
+    }
+
+    const bmiData = await User.aggregate([
+      {
+        $match: initialMatchStage,
+      },
+      {
+        $unwind: "$members",
+      },
+      {
+        $match: memberMatchStage,
+      },
+      {
+        $lookup: {
+          from: "demographics",
+          localField: "members.demographic_id",
+          foreignField: "_id",
+          as: "memberDemographic",
+        },
+      },
+      {
+        $unwind: "$memberDemographic",
+      },
+      {
+        $match: {
+          "memberDemographic.height": { $gt: 0 }, // Ensure height is greater than 0
+          "memberDemographic.weight": { $gt: 0 }, // Ensure weight is greater than 0
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          gender: "$members.gender",
+          height: "$memberDemographic.height",
+          weight: "$memberDemographic.weight",
+          bmi: {
+            $round: [
+              {
+                $divide: [
+                  "$memberDemographic.weight",
+                  {
+                    $pow: [
+                      { $divide: ["$memberDemographic.height", 3.2808399] },
+                      2,
+                    ],
+                  },
+                ],
+              },
+              2,
+            ],
+          },
+        },
+      },
+      {
+        $group: {
+          _id: "$gender",
+          bmiValues: { $push: "$bmi" },
+          heightValues: { $push: "$height" },
+          weightValues: { $push: "$weight" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          group: "$_id",
+          bmiValues: 1,
+          heightValues: 1,
+          weightValues: 1,
+        },
+      },
+    ]);
+
+    const formattedResult = bmiData.reduce((acc, item) => {
+      acc[item.group || "All"] = {
+        bmiValues: item.bmiValues,
+        heightValues: item.heightValues,
+        weightValues: item.weightValues,
+      };
+      return acc;
+    }, {});
+
+    res
+      .status(200)
+      .json({ village: village, bmiDistribution: formattedResult });
+  } catch (error) {
+    console.error("Error fetching BMI distribution:", error);
+    res.status(500).json({ error: "Internal server error." });
+  }
+};
+
+const getChronicDiseasePrevalence = async (req, res) => {
+  try {
+    const { village, disease } = req.query;
+
+    const initialMatchStage = {};
+    if (village) {
+      initialMatchStage["village_name"] = { $regex: new RegExp(village, "i") };
+    }
+
+    const memberMatchStage = {};
+    if (disease) {
+      memberMatchStage["memberDemographic.chronic_diseases"] = {
+        $in: [new RegExp(disease, "i")],
+      };
+    }
+
+    const prevalenceData = await User.aggregate([
+      {
+        $match: initialMatchStage,
+      },
+      {
+        $unwind: "$members",
+      },
+      {
+        $lookup: {
+          from: "demographics",
+          localField: "members.demographic_id",
+          foreignField: "_id",
+          as: "memberDemographic",
+        },
+      },
+      {
+        $unwind: "$memberDemographic",
+      },
+      {
+        $match: {
+          "memberDemographic.chronic_disease": {
+            $exists: true,
+            $not: { $size: 0 },
+          },
+        },
+      },
+      {
+        $match: memberMatchStage,
+      },
+      {
+        $unwind: "$memberDemographic.chronic_disease",
+      },
+      {
+        $lookup: {
+          from: "demographic_dropdowns",
+          localField: "memberDemographic.chronic_disease",
+          foreignField: "_id",
+          as: "diseaseInfo",
+        },
+      },
+      {
+        $unwind: "$diseaseInfo",
+      },
+      {
+        $match: {
+          "diseaseInfo.type": "chronic_diseases",
+        },
+      },
+      {
+        $group: {
+          _id: {
+            village: "$village_name",
+            diseaseNames: "$diseaseInfo.name",
+          },
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $group: {
+          _id: "$_id.village",
+          diseases: {
+            $push: {
+              diseaseNames: "$_id.diseaseNames",
+              count: "$count",
+            },
+          },
+          totalMembers: { $sum: "$count" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          village: "$_id",
+          diseases: {
+            $sortArray: {
+              input: {
+                $map: {
+                  input: "$diseases",
+                  as: "d",
+                  in: {
+                    diseaseNames: "$$d.diseaseNames",
+                    count: "$$d.count",
+                    prevalence: {
+                      $round: [
+                        {
+                          $multiply: [
+                            { $divide: ["$$d.count", "$totalMembers"] },
+                            100,
+                          ],
+                        },
+                        2,
+                      ],
+                    },
+                  },
+                },
+              },
+              sortBy: { prevalence: -1 },
+            },
+          },
+          totalMembers: 1,
+        },
+      },
+    ]);
+
+    const formattedResult = prevalenceData.reduce((acc, item) => {
+      acc[item.village] = {
+        diseases: item.diseases,
+        totalMembersWithDisease: item.totalMembers,
+      };
+      return acc;
+    }, {});
+
+    res.status(200).json({ chronicDiseasePrevalence: formattedResult });
+  } catch (error) {
+    console.error("Error fetching chronic disease prevalence:", error);
+    res.status(500).json({ error: "Internal server error." });
+  }
+};
+
+const getIncomeRangeByAgeAndOptionalGender = async (req, res) => {
+  try {
+    const { village, gender } = req.query;
+
+    if (!village) {
+      return res.status(400).json({ error: "Village parameter is required." });
+    }
+
+    const initialMatchStage = {
+      village_name: { $regex: new RegExp(village, "i") },
+    };
+
+    const memberMatchStage = {};
+    if (gender) {
+      memberMatchStage["members.gender"] = {
+        $regex: new RegExp(`\\b${gender}\\b`, "i"),
+      };
+    }
+
+    const incomeRangeData = await User.aggregate([
+      {
+        $match: initialMatchStage,
+      },
+      {
+        $unwind: "$members",
+      },
+      {
+        $match: memberMatchStage,
+      },
+      {
+        $lookup: {
+          from: "demographics",
+          localField: "members.demographic_id",
+          foreignField: "_id",
+          as: "memberDemographic",
+        },
+      },
+      {
+        $unwind: "$memberDemographic",
+      },
+      {
+        $lookup: {
+          from: "demographic_dropdowns",
+          localField: "memberDemographic.yearly_income",
+          foreignField: "_id",
+          as: "incomeInfo",
+        },
+      },
+      {
+        $unwind: {
+          path: "$incomeInfo",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $group: {
+          _id: {
+            village: "$village_name",
+            gender: "$members.gender",
+            incomeNames: "$incomeInfo.name",
+          },
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            village: "$_id.village",
+            gender: "$_id.gender",
+          },
+          incomeRanges: {
+            $push: {
+              names: "$_id.incomeNames", // Push the dropdown names
+              count: "$count",
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          village: "$_id.village",
+          gender: "$_id.gender",
+          incomeRanges: 1,
+        },
+      },
+      {
+        $sort: { village: 1, gender: 1 },
+      },
+    ]);
+
+    const formattedResult = incomeRangeData.reduce((acc, item) => {
+      const villageKey = item.village;
+      const genderKey = item.gender || "All";
+
+      if (!acc[villageKey]) {
+        acc[villageKey] = {};
+      }
+      acc[villageKey][genderKey] = {
+        incomeRanges: item.incomeRanges, // Contains names and counts
+      };
+      return acc;
+    }, {});
+
+    res.status(200).json({ incomeRangeValues: formattedResult });
+  } catch (error) {
+    console.error("Error fetching income range values:", error);
+    res.status(500).json({ error: "Internal server error." });
+  }
+};
+
+const getMotorDisabilityPrevalenceByVillageAndOptionalGender = async (req, res) => {
+  try {
+    const { village, gender } = req.query;
+
+    if (!village) {
+      return res.status(400).json({ error: "Village parameter is required." });
+    }
+
+    const initialMatchStage = {
+      village_name: { $regex: new RegExp(village, "i") },
+    };
+
+    const memberMatchStage = {};
+    if (gender) {
+      memberMatchStage["members.gender"] = { $regex: new RegExp(`\\b${gender}\\b`, "i") };
+    }
+
+    const motorDisabilityData = await User.aggregate([
+      {
+        $match: initialMatchStage,
+      },
+      {
+        $unwind: "$members",
+      },
+      {
+        $match: memberMatchStage, // Apply gender filter
+      },
+      {
+        $lookup: {
+          from: "demographics",
+          localField: "members.demographic_id",
+          foreignField: "_id",
+          as: "memberDemographic",
+        },
+      },
+      {
+        $unwind: "$memberDemographic",
+      },
+      {
+        $lookup: {
+          from: "demographic_dropdowns",
+          localField: "memberDemographic.motor_disablity",
+          foreignField: "_id",
+          as: "motorDisabilityInfo",
+        },
+      },
+      {
+        $unwind: {
+          path: "$motorDisabilityInfo",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $group: {
+          _id: {
+            village: "$village_name",
+            gender: "$members.gender",
+            disability: "$motorDisabilityInfo.name",
+          },
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            village: "$_id.village",
+            gender: "$_id.gender",
+          },
+          disabilities: {
+            $push: {
+              name: "$_id.disability",
+              count: "$count",
+            },
+          },
+          totalMembers: { $sum: "$count" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          village: "$_id.village",
+          gender: "$_id.gender",
+          disabilities: {
+            $map: {
+              input: "$disabilities",
+              as: "d",
+              in: {
+                name: "$$d.name", 
+                count: "$$d.count",
+                share: { $round: [{ $divide: ["$$d.count", "$totalMembers"] }, 2] },
+              },
+            },
+          },
+          totalMembers: 1,
+        },
+      },
+      {
+        $sort: { village: 1, gender: 1 },
+      },
+    ]);
+
+    const formattedResult = motorDisabilityData.reduce((acc, item) => {
+      const villageKey = item.village;
+      const genderKey = item.gender || "All";
+
+      if (!acc[villageKey]) {
+        acc[villageKey] = {};
+      }
+      acc[villageKey][genderKey] = {
+        disabilities: item.disabilities,
+        totalMembers: item.totalMembers,
+      };
+      return acc;
+    }, {});
+
+    res.status(200).json({ motorDisabilityPrevalence: formattedResult });
+  } catch (error) {
+    console.error("Error fetching motor disability prevalence:", error);
+    res.status(500).json({ error: "Internal server error." });
+  }
+};
+
+module.exports = {
+  getMaritalStatusByVillage,
+  getDietShareByVillageAndOptionalGender,
+  getBMIDistributionByVillageAndOptionalGender,
+  getChronicDiseasePrevalence,
+  getIncomeRangeByAgeAndOptionalGender,
+  getMotorDisabilityPrevalenceByVillageAndOptionalGender
+};

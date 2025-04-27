@@ -9,7 +9,7 @@ const path = require("path");
 const ErrorHandler = require("./Middlewares/errorHandler");
 
 const user = require("./Routes/user");
-const moderator = require("./Routes/moderator");
+const moderator = require("./Routes/moderator"); 
 const cultivation = require("./Routes/cultivation");
 const crop = require("./Routes/crop");
 const trees = require("./Routes/trees");
@@ -34,6 +34,7 @@ const consumptionCrop = require("./Routes/consumptionCrop");
 const consumption = require("./Routes/consumption");
 const webhook = require("./Routes/webhook");
 const dashboard = require("./Routes/dashboard");
+const demographicDashboard = require("./Routes/dashboard-demographics");
 const admin = require("./Routes/admin");
 const demographic = require("./Routes/demographicRoutes");
 const demographic_dropdown = require("./Routes/demographic-dropdown");
@@ -202,6 +203,7 @@ app.use("/api/mobility-officer-dropdown", mobility_officer_dropdown);
 app.use("/api/water-officer-dropdown", water_officer_dropdown);
 app.use("/api/webhook", webhook);
 app.use("/api/dashboard", dashboard);
+app.use("/api/demographic-dashboard", demographicDashboard);
 
 app.get("/", async (req, res) => {
     // for await (const _item of Object.entries(object_of_arrays)) {
