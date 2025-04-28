@@ -8,8 +8,8 @@ const csvtojson = require("csvtojson");
 const path = require("path");
 const ErrorHandler = require("./Middlewares/errorHandler");
 
-// const user = require("./Routes/user");
-// const moderator = require("./Routes/moderator"); 
+const user = require("./Routes/user");
+const moderator = require("./Routes/moderator"); 
 const cultivation = require("./Routes/cultivation");
 const crop = require("./Routes/crop");
 const trees = require("./Routes/trees");
@@ -136,8 +136,8 @@ app.use(
 );
 
 app.use("/api/admin", admin);
-// app.use("/api/user", user);
-// app.use("/api/moderator", moderator);
+app.use("/api/user", user);
+app.use("/api/moderator", moderator);
 app.use("/api/cultivation", cultivation);
 app.use("/api/crop", crop);
 app.use("/api/trees", trees);
