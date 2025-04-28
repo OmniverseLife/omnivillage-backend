@@ -7,4 +7,6 @@ router.get("/bmi-distribution", demographic_dashboard_controller.getBMIDistribut
 router.get("/chronic-disease-prevalence", demographic_dashboard_controller.getChronicDiseasePrevalence);
 router.get("/income-range", demographic_dashboard_controller.getIncomeRangeByAgeAndOptionalGender);
 router.get("/motor-disability", demographic_dashboard_controller.getMotorDisabilityPrevalenceByVillageAndOptionalGender);
+router.get("/population-snapshot", demographic_dashboard_controller.getVillagePopulationSnapshot);
+router.get("/language-heatmap", demographic_dashboard_controller.getLanguageProficiencyHeatMap);
 module.exports = router;

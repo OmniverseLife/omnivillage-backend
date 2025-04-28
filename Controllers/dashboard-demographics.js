@@ -721,6 +721,237 @@ const getMotorDisabilityPrevalenceByVillageAndOptionalGender = async (
   }
 };
 
+const getVillagePopulationSnapshot = async (req, res) => {
+  try {
+    const { village } = req.query;
+
+    if (!village) {
+      return res.status(400).json({ error: "Village parameter is required." });
+    }
+
+    const villageRegex = new RegExp(village, "i"); // Case-insensitive matching
+
+    const snapshotData = await User.aggregate([
+      {
+        $match: { village_name: villageRegex },
+      },
+      {
+        $group: {
+          _id: "$village_name",
+          uniqueHouseholds: { $sum: 1 },
+          users: { $push: "$$ROOT" }, // Store user documents for later processing
+        },
+      },
+      {
+        $unwind: "$users",
+      },
+      {
+        $unwind: "$users.members",
+      },
+      {
+        $group: {
+          _id: {
+            village: "$_id",
+            gender: "$users.members.gender",
+          },
+          count: { $sum: 1 },
+          uniqueHouseholds: { $first: "$uniqueHouseholds" },
+        },
+      },
+      {
+        $group: {
+          _id: "$_id.village",
+          genderCounts: {
+            $push: {
+              gender: "$_id.gender",
+              count: "$count",
+            },
+          },
+          totalPopulation: { $sum: "$count" },
+          uniqueHouseholds: { $first: "$uniqueHouseholds" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          village: "$_id",
+          genderCounts: 1,
+          totalPopulation: 1,
+          uniqueHouseholds: 1,
+        },
+      },
+    ]);
+
+    if (snapshotData.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "No data found for the specified village." });
+    }
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        village: village,
+        snapshot: snapshotData[0],
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching village population snapshot:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error.",
+    });
+  }
+};
+
+const getLanguageProficiencyHeatMap = async (req, res) => {
+  try {
+    const { village } = req.query;
+
+    if (!village) {
+      return res.status(400).json({ error: "Village parameter is required." });
+    }
+
+    const villageRegex = new RegExp(village, "i");
+
+    const heatmapData = await User.aggregate([
+      {
+        $match: { village_name: villageRegex },
+      },
+      {
+        $unwind: "$members",
+      },
+      {
+        $lookup: {
+          from: "demographics",
+          localField: "members.demographic_id",
+          foreignField: "_id",
+          as: "memberDemographics",
+        },
+      },
+      {
+        $unwind: "$memberDemographics",
+      },
+      {
+        $project: {
+          _id: 0,
+          language_speak: "$memberDemographics.language_speak",
+          technical_vocational_skills:
+            "$memberDemographics.technical_vocational_skills",
+        },
+      },
+      {
+        $unwind: "$language_speak",
+      },
+      {
+        $unwind: "$technical_vocational_skills",
+      },
+      {
+        $lookup: {
+          from: "demographic_dropdowns", // Look up language names
+          localField: "language_speak",
+          foreignField: "_id",
+          as: "language_name",
+        },
+      },
+      {
+        $unwind: "$language_name",
+      },
+      {
+        $lookup: {
+          from: "demographic_dropdowns", // Look up skill names
+          localField: "technical_vocational_skills",
+          foreignField: "_id",
+          as: "skill_name",
+        },
+      },
+      {
+        $unwind: "$skill_name",
+      },
+      {
+        $group: {
+          _id: {
+            language: "$language_name.name", // Use the name from demographicDropdown
+            skill: "$skill_name.name", // Use the name from demographicDropdown
+          },
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          data: {
+            $push: {
+              language: "$_id.language",
+              skill: "$_id.skill",
+              count: "$count",
+            },
+          },
+          languages: { $addToSet: "$_id.language" },
+          skills: { $addToSet: "$_id.skill" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          languages: 1,
+          skills: 1,
+          data: 1,
+        },
+      },
+    ]);
+
+    if (heatmapData.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "No data found for the specified village." });
+    }
+
+    const result = heatmapData[0];
+
+    const matrix = result.languages
+    .map((language) => {
+      const row = { language };
+      let found = false;
+  
+      result.skills.forEach((skill) => {
+        const entry = result.data.find(
+          (item) =>
+            item.language["en"] === language["en"] &&
+            item.skill["en"] === skill["en"]
+        );
+  
+        if (entry != undefined) {
+          found = true;
+        }
+  
+        // Properly store per-skill count in row
+        row[skill.en] = entry ? entry.count : 0;
+      });
+  
+      return found ? row : null;
+    })
+    .filter(Boolean);
+  
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        village: village,
+        heatmapData: matrix,
+        uniqueSkills: result.skills,
+        uniqueLanguages: result.languages,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching language proficiency heatmap data:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error.",
+    });
+  }
+};
+
 module.exports = {
   getMaritalStatusByVillage,
   getDietShareByVillageAndOptionalGender,
@@ -728,4 +959,6 @@ module.exports = {
   getChronicDiseasePrevalence,
   getIncomeRangeByAgeAndOptionalGender,
   getMotorDisabilityPrevalenceByVillageAndOptionalGender,
+  getVillagePopulationSnapshot,
+  getLanguageProficiencyHeatMap,
 };
