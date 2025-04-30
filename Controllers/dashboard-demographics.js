@@ -783,9 +783,13 @@ const getVillagePopulationSnapshot = async (req, res) => {
     ]);
 
     if (snapshotData.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "No data found for the specified village." });
+      return res.status(200).json({
+        status: "success",
+        data: {
+          village: village,
+          snapshot: {},
+        },
+      });
     }
 
     res.status(200).json({
@@ -902,37 +906,42 @@ const getLanguageProficiencyHeatMap = async (req, res) => {
     ]);
 
     if (heatmapData.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "No data found for the specified village." });
+      return res.status(200).json({
+        status: "success",
+        data: {
+          village: village,
+          uniqueSkills: [],
+          heatmapData: [],
+          uniqueLanguages: [],
+        },
+      });
     }
 
     const result = heatmapData[0];
 
     const matrix = result.languages
-    .map((language) => {
-      const row = { language };
-      let found = false;
-  
-      result.skills.forEach((skill) => {
-        const entry = result.data.find(
-          (item) =>
-            item.language["en"] === language["en"] &&
-            item.skill["en"] === skill["en"]
-        );
-  
-        if (entry != undefined) {
-          found = true;
-        }
-  
-        // Properly store per-skill count in row
-        row[skill.en] = entry ? entry.count : 0;
-      });
-  
-      return found ? row : null;
-    })
-    .filter(Boolean);
-  
+      .map((language) => {
+        const row = { language };
+        let found = false;
+
+        result.skills.forEach((skill) => {
+          const entry = result.data.find(
+            (item) =>
+              item.language["en"] === language["en"] &&
+              item.skill["en"] === skill["en"]
+          );
+
+          if (entry != undefined) {
+            found = true;
+          }
+
+          // Properly store per-skill count in row
+          row[skill.en] = entry ? entry.count : 0;
+        });
+
+        return found ? row : null;
+      })
+      .filter(Boolean);
 
     res.status(200).json({
       status: "success",
