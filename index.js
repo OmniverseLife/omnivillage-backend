@@ -35,6 +35,7 @@ const consumption = require("./Routes/consumption");
 const webhook = require("./Routes/webhook");
 const dashboard = require("./Routes/dashboard");
 const demographicDashboard = require("./Routes/dashboard-demographics");
+const landholdingDashboard = require("./Routes/dashboard-landholdings");
 const admin = require("./Routes/admin");
 const demographic = require("./Routes/demographicRoutes");
 const demographic_dropdown = require("./Routes/demographic-dropdown");
@@ -204,6 +205,7 @@ app.use("/api/water-officer-dropdown", water_officer_dropdown);
 app.use("/api/webhook", webhook);
 app.use("/api/dashboard", dashboard);
 app.use("/api/demographic-dashboard", demographicDashboard);
+app.use("/api/landholding-dashboard", landholdingDashboard);
 
 app.get("/", async (req, res) => {
     // for await (const _item of Object.entries(object_of_arrays)) {
