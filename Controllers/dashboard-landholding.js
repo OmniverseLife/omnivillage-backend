@@ -1,4 +1,4 @@
-const Landholding = require("../models/landholding");
+const Landholding = require("../Models/landholding");
 
 const getParcelMapData = async (req, res) => {
   try {
