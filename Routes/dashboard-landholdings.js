@@ -28,4 +28,14 @@ router.get(
   landholding_dashboard_controller.getIdleLandReasonSankey
 );
 
+router.get(
+  "/purchase-timeline",
+  landholding_dashboard_controller.getYearPurchaseTimeline
+);
+
+router.get(
+  "/landholding-declaration-vs-use",
+  landholding_dashboard_controller.getLandDeclarationVsUse
+);
+
 module.exports = router;

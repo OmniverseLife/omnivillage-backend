@@ -542,6 +542,143 @@ const getIdleLandReasonSankey = async (req, res) => {
   }
 };
 
+const getYearPurchaseTimeline = async (req, res) => {
+  try {
+    const { country, village } = req.query;
+
+    if (!country) {
+      return res.status(400).json({ error: "Country is required" });
+    }
+
+    const matchStage = {};
+    if (country) {
+      matchStage["userDetails.country"] = {
+        $regex: new RegExp(`^${country}$`, "i"),
+      };
+    }
+    if (village) {
+      matchStage["userDetails.village_name"] = {
+        $regex: new RegExp(`^${village}$`, "i"),
+      };
+    }
+
+    const pipeline = [
+      {
+        $lookup: {
+          from: "users",
+          localField: "user_id",
+          foreignField: "_id",
+          as: "userDetails",
+        },
+      },
+      {
+        $unwind: {
+          path: "$userDetails",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      // Add the $match stage to the pipeline
+      {
+        $match: matchStage,
+      },
+      {
+        $group: {
+          _id: "$year_purchased",
+          totalLandArea: {
+            $sum: "$total_land_area",
+          },
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $sort: {
+          _id: 1,
+        },
+      },
+      {
+        $project: {
+          year: "$_id",
+          totalLandArea: 1,
+          count: 1,
+          _id: 0,
+        },
+      },
+    ];
+
+    const result = await Landholding.aggregate(pipeline);
+    res.json({ result });
+  } catch (error) {
+    console.error("Error fetching year purchase timeline data:", error);
+    res.status(500).json({
+      error: "Internal server error",
+      details: error.message,
+    });
+  }
+};
+
+const getLandDeclarationVsUse = async (req, res) => {
+  try {
+    const { country, village } = req.query;
+
+    // Define the match stage with optional country and village filters
+    const matchStage = {};
+    if (country) {
+      matchStage["userDetails.country"] = { $regex: new RegExp(`^${country}$`, "i") };
+    }
+    if (village) {
+      matchStage["userDetails.village_name"] = { $regex: new RegExp(`^${village}$`, "i") };
+    }
+
+    const result = await Landholding.aggregate([
+      {
+        $lookup: {
+          from: "users",
+          localField: "user_id",
+          foreignField: "_id",
+          as: "userDetails",
+        },
+      },
+      {
+        $unwind: {
+          path: "$userDetails",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $match: matchStage,
+      },
+      {
+        $group: {
+          _id: "$geotag",
+          totalLandDeclared: { $sum: "$total_land_area" },
+          totalLandUsed: {
+            $sum: {
+              $cond: [{ $eq: ["$land_under_use", true] }, "$total_land_area", 0],
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          geotag: "$_id",
+          totalLandDeclared: 1,
+          totalLandUsed: 1,
+          _id: 0,
+        },
+      },
+    ]);
+
+    res.json({ result });
+  } catch (error) {
+    console.error("Error fetching land declaration vs. use data:", error);
+    res.status(500).json({
+      error: "Internal server error",
+      details: error.message,
+    });
+  }
+};
+
+
 module.exports = {
   getParcelMapData,
   getLandUseDistribution,
@@ -549,4 +686,6 @@ module.exports = {
   getUtilisationStatus,
   getUsagePurposeTreeMap,
   getIdleLandReasonSankey,
+  getYearPurchaseTimeline,
+  getLandDeclarationVsUse
 };

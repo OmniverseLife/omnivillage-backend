@@ -961,6 +961,417 @@ const getLanguageProficiencyHeatMap = async (req, res) => {
   }
 };
 
+const getOccupationTreeMapData = async (req, res) => {
+  try {
+    const { village } = req.query;
+
+    const matchStage = {};
+    if (village) {
+      matchStage["village_name"] = { $regex: new RegExp(village, "i") };
+    }
+
+    const result = await User.aggregate([
+      {
+        $match: matchStage,
+      },
+      {
+        $unwind: "$members",
+      },
+      {
+        $lookup: {
+          from: "demographics",
+          localField: "members.demographic_id",
+          foreignField: "_id",
+          as: "memberDemographics",
+        },
+      },
+      {
+        $unwind: "$memberDemographics",
+      },
+      {
+        $project: {
+          _id: 0,
+          occupation: "$memberDemographics.occupation", // changed from  $memberDemographics.language_speak
+        },
+      },
+      {
+        $lookup: {
+          from: "demographic_dropdowns",
+          localField: "occupation",
+          foreignField: "_id",
+          as: "occupationDetails",
+        },
+      },
+      {
+        $unwind: "$occupationDetails",
+      },
+      {
+        $group: {
+          _id: "$occupationDetails.name",
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          occupation: "$_id",
+          count: 1,
+          _id: 0,
+        },
+      },
+    ]);
+
+    res.status(200).json({
+      status: "success",
+      data: result,
+    });
+  } catch (error) {
+    console.error("Error fetching occupation tree map data:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      details: error.message,
+    });
+  }
+};
+
+const getDualKPISavings = async (req, res) => {
+  try {
+    const { village } = req.query;
+
+    const matchStage = {};
+    if (village) {
+      matchStage["village_name"] = { $regex: new RegExp(village, "i") };
+    }
+
+    const result = await User.aggregate([
+      {
+        $match: matchStage,
+      },
+      {
+        $unwind: "$members",
+      },
+      {
+        $lookup: {
+          from: "demographics",
+          localField: "members.demographic_id",
+          foreignField: "_id",
+          as: "memberDemographic",
+        },
+      },
+      {
+        $unwind: "$memberDemographic",
+      },
+      {
+        $group: {
+          _id: null,
+          totalUsers: { $sum: 1 },
+          bankAccountUsers: {
+            $sum: {
+              $cond: [{ $eq: ["$memberDemographic.bank_account", true] }, 1, 0],
+            },
+          },
+          savingsUsers: {
+            $sum: {
+              $cond: [
+                { $eq: ["$memberDemographic.savings_investment", true] },
+                1,
+                0,
+              ],
+            },
+          },
+          totalSavings: {
+            $sum: {
+              $cond: [
+                { $eq: ["$memberDemographic.savings_investment", true] },
+                "$memberDemographic.savings_investment_amount",
+                0,
+              ],
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          bankAccountPercentage: {
+            $multiply: [{ $divide: ["$bankAccountUsers", "$totalUsers"] }, 100],
+          },
+          savingsPercentage: {
+            $multiply: [{ $divide: ["$savingsUsers", "$totalUsers"] }, 100],
+          },
+          averageSavingsAmount: {
+            $cond: [
+              { $eq: ["$savingsUsers", 0] }, // Avoid division by zero
+              0,
+              { $divide: ["$totalSavings", "$savingsUsers"] },
+            ],
+          },
+        },
+      },
+    ]);
+
+    const data = result[0] || {
+      bankAccountPercentage: 0,
+      savingsPercentage: 0,
+      averageSavingsAmount: 0,
+    };
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        bankAccountPercentage: data.bankAccountPercentage.toFixed(2),
+        savingsPercentage: data.savingsPercentage.toFixed(2),
+        averageSavingsAmount: data.averageSavingsAmount.toFixed(2),
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching data for dual KPI cards:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      details: error.message,
+    });
+  }
+};
+
+const getHabitsData = async (req, res) => {
+  try {
+    const { village } = req.query;
+
+    const matchStage = {};
+    if (village) {
+      matchStage["village_name"] = { $regex: new RegExp(village, "i") };
+    }
+
+    const result = await User.aggregate([
+      {
+        $match: matchStage,
+      },
+      {
+        $unwind: "$members",
+      },
+      {
+        $lookup: {
+          from: "demographics",
+          localField: "members.demographic_id",
+          foreignField: "_id",
+          as: "memberDemographic",
+        },
+      },
+      {
+        $unwind: "$memberDemographic",
+      },
+      {
+        $lookup: {
+          from: "demographic_dropdowns",
+          localField: "memberDemographic.specific_habit",
+          foreignField: "_id",
+          as: "habitData",
+        },
+      },
+      {
+        $unwind: {
+          path: "$habitData",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $lookup: {
+          from: "demographic_dropdowns", // added lookup for currently_feeling
+          localField: "memberDemographic.currently_feeling",
+          foreignField: "_id",
+          as: "feelingData",
+        },
+      },
+      {
+        $unwind: {
+          path: "$feelingData",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $group: {
+          _id: {
+            habit: "$habitData.name",
+            feeling: "$feelingData.name", // Group by habit and feeling
+          },
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $sort: {
+          count: -1,
+        },
+      },
+      {
+        $group: {
+          _id: "$_id.habit",
+          topFeelings: {
+            $push: {
+              feeling: "$_id.feeling",
+              count: "$count",
+            },
+          },
+          totalCount: { $sum: "$count" },
+        },
+      },
+      {
+        $project: {
+          habit: "$_id",
+          topFeelings: {
+            $slice: ["$topFeelings", 3], // Get the top 3 feelings
+          },
+          totalCount: 1,
+          _id: 0,
+        },
+      },
+      {
+        $lookup: {
+          from: "risk_levels",
+          localField: "habit",
+          foreignField: "habitName",
+          as: "riskData",
+        },
+      },
+      {
+        $unwind: {
+          path: "$riskData",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $project: {
+          habit: 1,
+          topFeelings: 1,
+          totalCount: 1,
+          riskLevel: {
+            $ifNull: ["$riskData.riskLevel", "No Data"],
+          },
+        },
+      },
+    ]);
+
+    res.status(200).json({
+      status: "success",
+      data: result,
+    });
+  } catch (error) {
+    console.error("Error fetching habits and feelings data:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      details: error.message,
+    });
+  }
+};
+
+const getEducationSankeyData = async (req, res) => {
+  try {
+    const { village } = req.query;
+
+    const matchStage = {};
+    if (village) {
+      matchStage["village_name"] = { $regex: new RegExp(village, "i") };
+    }
+
+    const result = await User.aggregate([
+      {
+        $match: matchStage,
+      },
+      {
+        $unwind: "$members",
+      },
+      {
+        $lookup: {
+          from: "demographics",
+          localField: "members.demographic_id",
+          foreignField: "_id",
+          as: "memberDemographic",
+        },
+      },
+      {
+        $unwind: "$memberDemographic",
+      },
+      {
+        $lookup: {
+          from: "demographic_dropdowns",
+          localField: "memberDemographic.education_status",
+          foreignField: "_id",
+          as: "educationStatusData",
+        },
+      },
+      {
+        $unwind: {
+          path: "$educationStatusData",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $lookup: {
+          from: "demographic_dropdowns",
+          localField: "memberDemographic.education_seeking_to_gain",
+          foreignField: "_id",
+          as: "educationSeekingData",
+        },
+      },
+      {
+        $unwind: {
+          path: "$educationSeekingData",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $group: {
+          _id: {
+            source: "$educationStatusData.name",
+            target: "$educationSeekingData.name",
+          },
+          value: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          source: "$_id.source",
+          target: "$_id.target",
+          value: 1,
+        },
+      },
+      {
+        $match: {
+          $expr: {
+            $and: [{ $ne: ["$source", null] }, { $ne: ["$target", null] }],
+          },
+        },
+      },
+    ]);
+
+    // Get unique nodes
+    const nodes = Array.from(
+      new Set(result.flatMap((link) => [link.source, link.target]))
+    ).map((name) => ({ name }));
+
+    // Map sources and targets to indices
+    const links = result.map((item) => ({
+      source: nodes.findIndex((node) => node.name === item.source),
+      target: nodes.findIndex((node) => node.name === item.target),
+      value: item.value,
+    }));
+
+    res.status(200).json({
+      status: "success",
+      data: { nodes, links },
+    });
+  } catch (error) {
+    console.error("Error fetching education Sankey data:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      details: error.message,
+    });
+  }
+};
+
 module.exports = {
   getMaritalStatusByVillage,
   getDietShareByVillageAndOptionalGender,
@@ -970,4 +1381,8 @@ module.exports = {
   getMotorDisabilityPrevalenceByVillageAndOptionalGender,
   getVillagePopulationSnapshot,
   getLanguageProficiencyHeatMap,
+  getOccupationTreeMapData,
+  getDualKPISavings,
+  getHabitsData,
+  getEducationSankeyData,
 };
