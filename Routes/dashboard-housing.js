@@ -30,4 +30,14 @@ router.get(
   housing_dashboard_controller.getEquipmentDemandData
 );
 
+router.get(
+  "/expansion-demand",
+  housing_dashboard_controller.getExpansionDemandData
+);
+
+router.get(
+  "/renovation-demand",
+  housing_dashboard_controller.getRenovationDemandData
+);
+
 module.exports = router;

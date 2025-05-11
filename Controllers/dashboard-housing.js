@@ -658,6 +658,240 @@ const getEquipmentDemandData = async (req, res) => {
   }
 };
 
+const getExpansionDemandData = async (req, res) => {
+  try {
+    const { country, village } = req.query;
+
+    const matchStage = {};
+    if (country) {
+      matchStage["userDetails.country"] = {
+        $regex: new RegExp(`^${country}$`, "i"),
+      };
+    }
+    if (village) {
+      matchStage["userDetails.village_name"] = {
+        $regex: new RegExp(`^${village}$`, "i"),
+      };
+    }
+
+    const result = await Housing.aggregate([
+      {
+        $lookup: {
+          from: "users",
+          localField: "user_id",
+          foreignField: "_id",
+          as: "userDetails",
+        },
+      },
+      {
+        $unwind: "$userDetails",
+      },
+      {
+        $match: matchStage,
+      },
+      {
+        $match: {
+          expansion_requirement: true,
+        },
+      },
+      {
+        $lookup: {
+          from: "housing_dropdowns",
+          localField: "expansion_urgency",
+          foreignField: "_id",
+          as: "expansionUrgencyData",
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalHouses: { $sum: 1 },
+          needExpansionCount: { $sum: 1 },
+          expansionUrgency: {
+            $push: {
+              urgencyName: {
+                $ifNull: [
+                  { $arrayElemAt: ["$expansionUrgencyData.name", 0] },
+                  null,
+                ],
+              },
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          totalHouses: 1,
+          needExpansionCount: 1,
+          expansionUrgency: 1,
+        },
+      },
+    ]);
+
+    // Process urgency counts and names.
+    const urgencyData = result[0] || {};
+
+    const expansionUrgencySummary = urgencyData.expansionUrgency
+      ? Object.entries(
+          urgencyData.expansionUrgency.reduce((acc, item) => {
+            const urgencyName = item.urgencyName;
+            if (
+              urgencyName &&
+              typeof urgencyName === "object" &&
+              Object.keys(urgencyName).length > 0
+            ) {
+              // Assuming there's a key like 'en', 'ms', or 'dz' that holds the string value
+              const urgencyValue = Object.values(urgencyName)[0];
+              acc[urgencyValue] = (acc[urgencyValue] || 0) + 1;
+            } else if (typeof urgencyName === "string") {
+              acc[urgencyName] = (acc[urgencyName] || 0) + 1;
+            }
+            return acc;
+          }, {})
+        ).map(([level, count]) => ({
+          level,
+          count,
+        }))
+      : [];
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        totalHouses: result[0]?.totalHouses || 0,
+        needExpansion: {
+          count: result[0]?.needExpansionCount || 0,
+          urgency: expansionUrgencySummary,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching expansion demand data:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      details: error.message,
+    });
+  }
+};
+
+const getRenovationDemandData = async (req, res) => {
+  try {
+    const { country, village } = req.query;
+
+    const matchStage = {};
+    if (country) {
+      matchStage["userDetails.country"] = {
+        $regex: new RegExp(`^${country}$`, "i"),
+      };
+    }
+    if (village) {
+      matchStage["userDetails.village_name"] = {
+        $regex: new RegExp(`^${village}$`, "i"),
+      };
+    }
+
+    const result = await Housing.aggregate([
+      {
+        $lookup: {
+          from: "users",
+          localField: "user_id",
+          foreignField: "_id",
+          as: "userDetails",
+        },
+      },
+      {
+        $unwind: "$userDetails",
+      },
+      {
+        $match: matchStage,
+      },
+      {
+        $match: {
+          renovation_requirement: true,
+        },
+      },
+      {
+        $lookup: {
+          from: "housing_dropdowns",
+          localField: "renovation_urgency",
+          foreignField: "_id",
+          as: "renovationUrgencyData",
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalHouses: { $sum: 1 },
+          needRenovationCount: { $sum: 1 },
+          renovationUrgency: {
+            $push: {
+              urgencyName: {
+                $ifNull: [
+                  { $arrayElemAt: ["$renovationUrgencyData.name", 0] },
+                  null,
+                ],
+              },
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          totalHouses: 1,
+          needRenovationCount: 1,
+          renovationUrgency: 1,
+        },
+      },
+    ]);
+
+    // Process urgency counts and names.
+    const urgencyData = result[0] || {};
+
+    const renovationUrgencySummary = urgencyData.renovationUrgency
+      ? Object.entries(
+          urgencyData.renovationUrgency.reduce((acc, item) => {
+            const urgencyName = item.urgencyName;
+            if (
+              urgencyName &&
+              typeof urgencyName === "object" &&
+              Object.keys(urgencyName).length > 0
+            ) {
+              // Assuming there's a key like 'en', 'ms', or 'dz' that holds the string value
+              const urgencyValue = Object.values(urgencyName)[0];
+              acc[urgencyValue] = (acc[urgencyValue] || 0) + 1;
+            } else if (typeof urgencyName === "string") {
+              acc[urgencyName] = (acc[urgencyName] || 0) + 1;
+            }
+            return acc;
+          }, {})
+        ).map(([level, count]) => ({
+          level,
+          count,
+        }))
+      : [];
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        totalHouses: result[0]?.totalHouses || 0,
+        needRenovation: {
+          count: result[0]?.needRenovationCount || 0,
+          urgency: renovationUrgencySummary,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching renovation demand data:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      details: error.message,
+    });
+  }
+};
+
 module.exports = {
   getHousingRenovationUrgencyData,
   getHouseTypeDonutData,
@@ -666,4 +900,6 @@ module.exports = {
   getAmenitiesRadarData,
   getAmenityHeatmapData,
   getEquipmentDemandData,
+  getExpansionDemandData,
+  getRenovationDemandData,
 };
