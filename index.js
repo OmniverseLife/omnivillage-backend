@@ -38,6 +38,11 @@ const demographicDashboard = require("./Routes/dashboard-demographics");
 const landholdingDashboard = require("./Routes/dashboard-landholdings");
 const housingDashboard = require("./Routes/dashboard-housing");
 const waterDashboard = require("./Routes/dashboard-water");
+const energyDashboard = require("./Routes/dashboard-energy");
+const mobilityDashboard = require("./Routes/dashboard-mobility");
+const personalDashboard = require("./Routes/dashboard-personal");
+const forestryDashboard = require("./Routes/dashboard-forestry");
+const commercialDashboard = require("./Routes/dashboard-commercial");
 const admin = require("./Routes/admin");
 const demographic = require("./Routes/demographicRoutes");
 const demographic_dropdown = require("./Routes/demographic-dropdown");
@@ -210,6 +215,11 @@ app.use("/api/demographic-dashboard", demographicDashboard);
 app.use("/api/landholding-dashboard", landholdingDashboard);
 app.use("/api/housing-dashboard", housingDashboard);
 app.use("/api/water-dashboard", waterDashboard);
+app.use("/api/energy-dashboard", energyDashboard);
+app.use("/api/mobility-dashboard", mobilityDashboard);
+app.use("/api/personal-dashboard", personalDashboard);
+app.use("/api/forestry-dashboard", forestryDashboard);
+app.use("/api/commercial-dashboard", commercialDashboard);
 
 app.get("/", async (req, res) => {
   // for await (const _item of Object.entries(object_of_arrays)) {
